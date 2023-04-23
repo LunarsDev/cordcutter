@@ -1,13 +1,13 @@
 [tool.poetry]
-name = "cordcutter"
+name = "cordcutter-discord.py"
 version = "0.1.0"
-description = "A nextcord extension that implements the circuit breaker design pattern"
-authors = ["teaishealthy <teaishealthy@protonmail.com>"]
+description = "A discord.py extension that implements the circuit breaker design pattern"
+authors = ["Soheab_"]
 license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.8"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.3.0"
@@ -15,12 +15,13 @@ ruff = "^0.0.261"
 nextcord = "^2.4.2"
 
 [tool.ruff]
-line-length = 100
+target-version = "py38"
+line-length = 120
 select = ["ALL"]
-ignore = ["D", "ANN101", "ANN401", "TRY003", "EM"]
+ignore = ["D", "ANN101", "ANN401", "TRY003", "EM", "UP007"]
 
 [tool.black]
-line-length = 100
+line-length = 120
 
 [build-system]
 requires = ["poetry-core"]
