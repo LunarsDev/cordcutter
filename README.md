@@ -16,7 +16,7 @@ For more information on the circuit breaker design pattern, see [this wikipedia 
 Cordcutter is currently in development and is not yet available on PyPI. You can install it from Git using pip:
 
 ```bash
-python -m pip install git+https://github.com/Soheab/cordcutter.git
+python -m pip install git+https://github.com/LunarsDev/cordcutter.git
 ```
 
 ## Usage
