@@ -42,6 +42,14 @@ class Cordcutter:
     trip_callback: Optional[Callable[:class:`~discord.Interaction`, Coroutine[Any, Any, Any]]]
         The function to call when the command breaker is tripped.
         This can also be set via the ``on_tripped_call`` decorator.
+
+    Attributes
+    -----------
+    threshold: :class:`int`
+        How many errors may occur before the command breaker trips.
+    tripped_at: Optional[:class:`datetime.datetime`]
+        The time the breaker tripped at.
+
     """
 
     def __init__(
@@ -59,6 +67,8 @@ class Cordcutter:
         self.reset_after = reset_after
         self.trip_callback = trip_callback
         self.errors: defaultdict[AppCommand, int] = defaultdict(int)
+
+        self.tripped_at: Optional[datetime.datetime] = None
 
     @property
     def reset_after(self) -> datetime.timedelta:
@@ -143,6 +153,7 @@ class Cordcutter:
             logger.warning("[cordcutter] An on_tripped_call cannot be found. Doing nothing.")
             return
 
+        self.tripped_at = datetime.datetime.utcnow()
         original_callback: CommandCallbackT = command._callback  # noqa: SLF001
         command._callback = self.__wrap_trip_callback(original_callback)  # noqa: SLF001
 
@@ -165,6 +176,7 @@ class Cordcutter:
         """
         logger.warning("[cordcutter] 🔌 Breaker reset for %s!", command.qualified_name)
 
+        self.tripped_at = None
         command._callback = original_callback  # type: ignore[reportGeneralTypeIssues] # noqa: SLF001
         self.errors.pop(command, None)
 
