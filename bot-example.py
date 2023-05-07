@@ -1,37 +1,40 @@
 # syncing is not included in this example.
 
 import discord
-from discord import app_commands
+from discord.ext import commands
 
 from cordcutter import Cordcutter
 
-client = discord.Client(intents=discord.Intents.none())
-tree = app_commands.CommandTree(client)
+bot = commands.Bot(command_prefix=commands.when_mentioned, intents=discord.Intents(messages=True, guilds=True))
 # Initialise the Cordcutter class
 # the constructor takes one required argument, the CommandTree
-# and three optional ones...
+# and four optional ones...
 # threshold (default: 3) - After how many errors it should trigger the breaker.
 # reset_after (default: 1 minutes) - The time after it should reset the break.
 # trip_callback (default: None) - The function it should call when the threshold is reached -
 # - you can also use the on_tripped_call decorator.
-# hybrid_app_command (default: True) - Whether to also use the breaker for hybrid app commands. -
-# - but that is not a thing on discord.Client so it does not nothing here.
+# hybrid_app_command (default: True) - Whether to also use the breaker for hybrid app commands.
 
 # Let's change the reset time to 5 minutes instead of 1
 # reset_after=datetime.timedelta(minutes=5) works too.
-# and let's also set hybrid_app_command to False as we don't have any hybrid app commands here.
-cordcutter = Cordcutter(tree, reset_after=5, hybrid_app_command=False)
+cordcutter = Cordcutter(bot.tree, reset_after=5)
 
 
-# Define a test command
-@tree.command(name="test")
-async def test_command(interaction: discord.Interaction) -> None:  # noqa: ARG001
-    raise RuntimeError("This command always fails!")
+# Define a test hybrid command
+@bot.hybrid_command(name="test")
+async def test_command(ctx: commands.Context):  # noqa: ANN201
+    # since only application commands are supported, we need to check if the command was invoked by a slash command
+    # if it was invoked by a slash command, ctx.interaction will be set, else it will be None
+    if ctx.interaction is not None:
+        raise RuntimeError("This command always fails!")
+
+    # if it was not invoked by a slash command, we can just continue as normal
+    await ctx.send("Prefix command invoked!")
 
 
 # Let's set this function as the trip callback using the decorator
 @cordcutter.on_tripped_call
-async def on_tripped(interaction: discord.Interaction):  # noqa: ANN201
+async def on_tripped(interaction: discord.Interaction) -> None:
     # In a classic circuit breaker, this is where you would show the user a message,
     # that lets them know that the command is temporarily disabled.
 
@@ -51,4 +54,4 @@ async def on_tripped(interaction: discord.Interaction):  # noqa: ANN201
         await interaction.followup.send(embed=breaker_embed)
 
 
-client.run("...")
+bot.run("...")

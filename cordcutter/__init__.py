@@ -8,19 +8,24 @@ from inspect import iscoroutinefunction
 from logging import getLogger
 from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Union
 
-from discord import Interaction, utils
+from discord.ext import commands as _ext_commands
 
 if TYPE_CHECKING:
-    from typing import TypeAlias  # noqa: I001
+    from typing import TypeAlias
 
+    from discord import Interaction
     from discord.app_commands import AppCommandError, Command, CommandTree, ContextMenu
-    from discord.app_commands.commands import (
-        CommandCallback as _CommandCallback,
-        ContextMenuCallback as _ContextMenuCallback,
-    )
+    from discord.app_commands.commands import CommandCallback as _CommandCallback
+    from discord.app_commands.commands import ContextMenuCallback as _ContextMenuCallback
+    from discord.ext.commands.hybrid import HybridAppCommand as _HybridAppCommand
 
-    CommandCallbackT: TypeAlias = Union[_CommandCallback[Any, ..., Any], _ContextMenuCallback]
-    AppCommand: TypeAlias = Union[Command, ContextMenu]
+    _HybridAppCommandCallback: TypeAlias = Callable[[_ext_commands.Context], Any]
+    CommandCallbackT: TypeAlias = Union[
+        _CommandCallback[Any, ..., Any],
+        _ContextMenuCallback,
+        _HybridAppCommandCallback,
+    ]
+    AppCommand: TypeAlias = Union[Command[Any, ..., Any], ContextMenu, _HybridAppCommand[Any, ..., Any]]
     BreakerCallbackT: TypeAlias = Callable[[Interaction[Any]], Coroutine[Any, Any, Any]]
 
 
@@ -59,9 +64,18 @@ class Cordcutter:
         threshold: int = 3,
         reset_after: Optional[Union[int, datetime.timedelta]] = None,
         trip_callback: Optional[BreakerCallbackT] = None,
+        hybrid_app_command: bool = True,
     ) -> None:
         self._original_tree_on_error = command_tree.on_error
         command_tree.on_error = self._tree_on_error
+
+        self._original_on_command_error = None
+        if hybrid_app_command:
+            if issubclass(command_tree.client.__class__, _ext_commands.Bot):
+                self._original_on_command_error = command_tree.client.on_command_error
+                command_tree.client.on_command_error = self._on_hybridcommand_on_error
+            else:
+                logger.debug("hybrid_app_command is True, but client is not a discord.ext.commands.Bot. Ignoring...")
 
         self.threshold: int = threshold
         self.reset_after = reset_after
@@ -105,18 +119,44 @@ class Cordcutter:
         # call the original handler
         return await self._original_tree_on_error(interaction, error)
 
+    async def _on_hybridcommand_on_error(
+        self,
+        ctx: _ext_commands.Context,
+        error: _ext_commands.HybridCommandError,
+    ) -> None:
+        # check if hybrid app command callback
+        if (interaction := ctx.interaction) is not None:
+            # call the handler
+            await self.handle_cutter(interaction, error)
+
+        # call the original handler
+        if self._original_on_command_error:
+            return await self._original_on_command_error(ctx, error)
+
+        return None
+
     # This hack seems to fix the CommandSignatureMismatch error from being raised by discord.py
-    def __wrap_trip_callback(self, command_callback: CommandCallbackT) -> Callable:
+    def __wrap_trip_callback(self, command_callback: CommandCallbackT, binding: Optional[Any], /) -> Callable:
         @functools.wraps(command_callback)  # type: ignore[PylancereportGeneralTypeIssues]
         async def wrapper(*args: Any, **_: Any) -> None:
-            interaction_arg: Interaction = utils.find(lambda x: isinstance(x, Interaction), args)  # type: ignore[PylancereportGeneralTypeIssues] # noqa: E501
+            interaction_arg = args[0] if binding else args[1]
+            if isinstance(interaction_arg, _ext_commands.Context):
+                if not (interaction := interaction_arg.interaction):
+                    raise TypeError("Only application commands are supported.")
+
+                interaction_arg = interaction
+
             if self.trip_callback:
                 return await self.trip_callback(interaction_arg)
             return None
 
         return wrapper
 
-    async def handle_cutter(self, interaction: Interaction[Any], error: AppCommandError) -> None:  # noqa: ARG002
+    async def handle_cutter(
+        self,
+        interaction: Union[Interaction[Any], _ext_commands.Context],
+        error: Union[AppCommandError, _ext_commands.HybridCommandError],  # noqa: ARG002
+    ) -> None:
         """The handler for CordCutter.
 
         Parameters
@@ -126,6 +166,12 @@ class Cordcutter:
         error: :exc:`AppCommandError`
             The exception that was raised.
         """
+        if isinstance(interaction, _ext_commands.Context):
+            if (ctx_interaction := interaction.interaction) is None:
+                raise TypeError("Only application commands are supported.")
+
+            interaction = ctx_interaction
+
         command = interaction.command
         if not command:
             return
@@ -153,9 +199,12 @@ class Cordcutter:
             logger.warning("[cordcutter] An on_tripped_call cannot be found. Doing nothing.")
             return
 
-        self.tripped_at = datetime.datetime.utcnow()
+        self.tripped_at = datetime.datetime.now(tz=datetime.timezone.utc)
         original_callback: CommandCallbackT = command._callback  # noqa: SLF001
-        command._callback = self.__wrap_trip_callback(original_callback)  # noqa: SLF001
+        command._callback = self.__wrap_trip_callback(  # noqa: SLF001
+            original_callback,
+            getattr(command, "binding", None),
+        )
 
         asyncio.get_event_loop().call_later(
             self.reset_after.total_seconds(),
