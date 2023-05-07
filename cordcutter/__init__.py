@@ -11,15 +11,15 @@ from typing import TYPE_CHECKING, Any, Callable, Coroutine, Optional, Union
 from discord.ext import commands as _ext_commands
 
 if TYPE_CHECKING:
-    from typing import TypeAlias
+    from typing_extensions import TypeAlias
 
     from discord import Interaction
     from discord.app_commands import AppCommandError, Command, CommandTree, ContextMenu
     from discord.app_commands.commands import CommandCallback as _CommandCallback
     from discord.app_commands.commands import ContextMenuCallback as _ContextMenuCallback
-    from discord.ext.commands.hybrid import HybridAppCommand as _HybridAppCommand
+    from discord.ext.commands.hybrid import HybridAppCommand as _HybridAppCommand  # type: ignore[reportMissingTypeStubs] # not gonna create stubs for this one thing
 
-    _HybridAppCommandCallback: TypeAlias = Callable[[_ext_commands.Context], Any]
+    _HybridAppCommandCallback: TypeAlias = Callable[[_ext_commands.Context[Any]], Any]
     CommandCallbackT: TypeAlias = Union[
         _CommandCallback[Any, ..., Any],
         _ContextMenuCallback,
@@ -121,7 +121,7 @@ class Cordcutter:
 
     async def _on_hybridcommand_on_error(
         self,
-        ctx: _ext_commands.Context,
+        ctx: _ext_commands.Context[Any],
         error: _ext_commands.HybridCommandError,
     ) -> None:
         # check if hybrid app command callback
@@ -136,10 +136,10 @@ class Cordcutter:
         return None
 
     # This hack seems to fix the CommandSignatureMismatch error from being raised by discord.py
-    def __wrap_trip_callback(self, command_callback: CommandCallbackT, binding: Optional[Any], /) -> Callable:
+    def __wrap_trip_callback(self, command_callback: CommandCallbackT, binding: Optional[Any], /) -> Callable[..., Any]:
         @functools.wraps(command_callback)  # type: ignore[PylancereportGeneralTypeIssues]
         async def wrapper(*args: Any, **_: Any) -> None:
-            interaction_arg = args[0] if binding else args[1]
+            interaction_arg: Union[Interaction, _ext_commands.Context[Any]] = args[0] if binding else args[1]
             if isinstance(interaction_arg, _ext_commands.Context):
                 if not (interaction := interaction_arg.interaction):
                     raise TypeError("Only application commands are supported.")
@@ -154,7 +154,7 @@ class Cordcutter:
 
     async def handle_cutter(
         self,
-        interaction: Union[Interaction[Any], _ext_commands.Context],
+        interaction: Union[Interaction[Any], _ext_commands.Context[Any]],
         error: Union[AppCommandError, _ext_commands.HybridCommandError],  # noqa: ARG002
     ) -> None:
         """The handler for CordCutter.
@@ -200,8 +200,8 @@ class Cordcutter:
             return
 
         self.tripped_at = datetime.datetime.now(tz=datetime.timezone.utc)
-        original_callback: CommandCallbackT = command._callback  # noqa: SLF001
-        command._callback = self.__wrap_trip_callback(  # noqa: SLF001
+        original_callback: CommandCallbackT = command.callback
+        command._callback = self.__wrap_trip_callback(  # noqa: SLF001 # type: ignore[ReportPrivateUsage] # can't do anything about this
             original_callback,
             getattr(command, "binding", None),
         )

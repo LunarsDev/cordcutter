@@ -22,7 +22,7 @@ cordcutter = Cordcutter(bot.tree, reset_after=5)
 
 # Define a test hybrid command
 @bot.hybrid_command(name="test")
-async def test_command(ctx: commands.Context):  # noqa: ANN201
+async def test_command(ctx: commands.Context[commands.Bot]):  # noqa: ANN201
     # since only application commands are supported, we need to check if the command was invoked by a slash command
     # if it was invoked by a slash command, ctx.interaction will be set, else it will be None
     if ctx.interaction is not None:
