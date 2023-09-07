@@ -101,7 +101,7 @@ class Cordcutter:
     @property
     def trip_callback(self) -> Optional[BreakerCallbackT]:
         """The function to call when the breaker is tripped."""
-        return self._trip_callback
+        return getattr(self, "_trip_callback", None)
 
     @trip_callback.setter
     def trip_callback(self, callback: Optional[BreakerCallbackT]) -> None:
