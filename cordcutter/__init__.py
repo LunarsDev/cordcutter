@@ -139,7 +139,7 @@ class Cordcutter:
     def __wrap_trip_callback(self, command_callback: CommandCallbackT, binding: Optional[Any], /) -> Callable[..., Any]:
         @functools.wraps(command_callback)  # type: ignore[PylancereportGeneralTypeIssues]
         async def wrapper(*args: Any, **_: Any) -> None:
-            interaction_arg: Union[Interaction, _ext_commands.Context[Any]] = args[0] if binding else args[1]
+            interaction_arg: Union[Interaction, _ext_commands.Context[Any]] = args[0] if not binding else args[1]
             if isinstance(interaction_arg, _ext_commands.Context):
                 if not (interaction := interaction_arg.interaction):
                     raise TypeError("Only application commands are supported.")
