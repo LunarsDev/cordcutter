@@ -71,7 +71,7 @@ class Cordcutter:
 
         self._original_on_command_error = None
         if hybrid_app_command:
-            if issubclass(command_tree.client.__class__, _ext_commands.Bot):
+            if issubclass(command_tree.client.__class__, (_ext_commands.AutoShardedBot, _ext_commands.Bot)):
                 self._original_on_command_error = command_tree.client.on_command_error
                 command_tree.client.on_command_error = self._on_hybridcommand_on_error
             else:
